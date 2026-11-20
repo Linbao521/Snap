@@ -1,51 +1,59 @@
-name: Build unsigned iPhone IPA
+name: Build ScrollCap IPA
 on:
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   build:
     runs-on: macos-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Toolchain
+        with:
+          repository: EthanShen10086/ScrollCap
+          ref: cf81b0449c81de328dad7809ca22c110aca1db3a
+          persist-credentials: false
+      - name: Generate Xcode project
         run: |
-          xcodebuild -version
           brew install xcodegen
-      - name: Test stitching engine
-        run: zsh Tools/StitchTest/run.sh
-      - name: Generate project
-        run: xcodegen generate
-      - name: Build iPhone app without signing
+          xcodegen generate
+      - name: Build for iPhone
         run: |
-          set -o pipefail
-          xcodebuild -project Snap.xcodeproj -scheme Snap -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= MARKETING_VERSION=1.0.0 CURRENT_PROJECT_VERSION=1 build 2>&1 | tee build.log
-      - name: Package and verify IPA
+          xcodebuild build \
+            -project ScrollCap.xcodeproj \
+            -scheme ScrollCap-iOS \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM=
+      - name: Package and validate IPA
         run: |
           set -euo pipefail
-          APP=build/Build/Products/Release-iphoneos/Snap.app
-          test -d "$APP"
-          plutil -lint "$APP/Info.plist"
-          lipo -archs "$APP/Snap" | grep -w arm64
+          products=build/Build/Products/Release-iphoneos
+          apps=("$products"/*.app)
+          test "${#apps[@]}" -eq 1
+          app="${apps[0]}"
+          executable=$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$app/Info.plist")
+          lipo -archs "$app/$executable" | grep -w arm64
+
+          found_broadcast=false
+          for extension in "$app"/PlugIns/*.appex; do
+            point=$(/usr/libexec/PlistBuddy -c 'Print NSExtension:NSExtensionPointIdentifier' "$extension/Info.plist")
+            if [[ "$point" == com.apple.broadcast-services-upload ]]; then
+              found_broadcast=true
+            fi
+          done
+          test "$found_broadcast" = true
+
           mkdir -p package/Payload output
-          ditto "$APP" package/Payload/Snap.app
-          cd package
-          ditto -c -k --keepParent Payload ../output/Snap-1.0.0-unsigned.ipa
-          cd ..
-          unzip -t output/Snap-1.0.0-unsigned.ipa
-          git rev-parse HEAD > output/SOURCE_COMMIT.txt
-          printf '%s\n' 'Unsigned device IPA. Requires local signing before installation. iOS 17+. Build has not been tested on a physical iPhone.' > output/INSTALL.txt
-          cd output
-          shasum -a 256 Snap-1.0.0-unsigned.ipa > SHA256SUMS.txt
+          ditto "$app" "package/Payload/$(basename "$app")"
+          (cd package && ditto -c -k --keepParent Payload ../output/ScrollCap-unsigned.ipa)
+          (cd output && unzip -tq ScrollCap-unsigned.ipa && shasum -a 256 ScrollCap-unsigned.ipa > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         with:
-          name: Snap-iPhone-unsigned-IPA
+          name: ScrollCap-unsigned-IPA
           path: output/
-          retention-days: 30
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: build-log
-          path: build.log
-          if-no-files-found: ignore
+          if-no-files-found: error
