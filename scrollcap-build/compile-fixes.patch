@@ -141,7 +141,7 @@ index a51f847..b2eeb9c 100644
          config: RequestConfig = .default
      ) async throws -> T {
 diff --git a/App/Shared/Services/LiveActivityManager.swift b/App/Shared/Services/LiveActivityManager.swift
-index f4cd853..ddf0e90 100644
+index f4cd853..b15eb13 100644
 --- a/App/Shared/Services/LiveActivityManager.swift
 +++ b/App/Shared/Services/LiveActivityManager.swift
 @@ -1,5 +1,5 @@
@@ -151,3 +151,52 @@ index f4cd853..ddf0e90 100644
  import Foundation
  import OSLog
  import SharedModels
+@@ -48,7 +48,7 @@ final class LiveActivityManager {
+         )
+ 
+         Task {
+-            await self.currentActivity?.update(.init(state: state, staleDate: nil))
++            await self.currentActivity?.update(using: state)
+         }
+     }
+ 
+@@ -60,7 +60,7 @@ final class LiveActivityManager {
+ 
+         Task {
+             await self.currentActivity?.end(
+-                .init(state: finalState, staleDate: nil),
++                using: finalState,
+                 dismissalPolicy: .after(.now + 5)
+             )
+             self.currentActivity = nil
+@@ -72,7 +72,7 @@ final class LiveActivityManager {
+         let failState = CaptureActivityAttributes.ContentState(phase: .failed)
+         Task {
+             await self.currentActivity?.end(
+-                .init(state: failState, staleDate: nil),
++                using: failState,
+                 dismissalPolicy: .immediate
+             )
+             self.currentActivity = nil
+diff --git a/Packages/SharedModels/Sources/SharedModels/CaptureActivityAttributes.swift b/Packages/SharedModels/Sources/SharedModels/CaptureActivityAttributes.swift
+index cb17d76..f89b6cb 100644
+--- a/Packages/SharedModels/Sources/SharedModels/CaptureActivityAttributes.swift
++++ b/Packages/SharedModels/Sources/SharedModels/CaptureActivityAttributes.swift
+@@ -3,7 +3,7 @@ import ActivityKit
+ import Foundation
+ 
+ public struct CaptureActivityAttributes: ActivityAttributes {
+-    public struct ContentState: Codable, Hashable {
++    public struct ContentState: Codable, Hashable, Sendable {
+         public var capturedFrames: Int
+         public var elapsedSeconds: Int
+         public var estimatedHeight: Int
+@@ -22,7 +22,7 @@ public struct CaptureActivityAttributes: ActivityAttributes {
+         }
+     }
+ 
+-    public enum CapturePhase: String, Codable, Hashable {
++    public enum CapturePhase: String, Codable, Hashable, Sendable {
+         case preparing
+         case capturing
+         case stitching
