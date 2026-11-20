@@ -140,3 +140,14 @@ index a51f847..b2eeb9c 100644
          headers: [String: String]? = nil,
          config: RequestConfig = .default
      ) async throws -> T {
+diff --git a/App/Shared/Services/LiveActivityManager.swift b/App/Shared/Services/LiveActivityManager.swift
+index f4cd853..ddf0e90 100644
+--- a/App/Shared/Services/LiveActivityManager.swift
++++ b/App/Shared/Services/LiveActivityManager.swift
+@@ -1,5 +1,5 @@
+ #if canImport(ActivityKit) && os(iOS)
+-import ActivityKit
++@preconcurrency import ActivityKit
+ import Foundation
+ import OSLog
+ import SharedModels
