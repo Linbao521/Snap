@@ -9,12 +9,21 @@ jobs:
   build:
     runs-on: macos-latest
     timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: source
     steps:
       - uses: actions/checkout@v4
         with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          path: source
           repository: EthanShen10086/ScrollCap
           ref: cf81b0449c81de328dad7809ca22c110aca1db3a
           persist-credentials: false
+      - name: Apply ScrollCap compilation fixes
+        run: git apply ../scrollcap-build/compile-fixes.patch
       - name: Generate Xcode project
         run: |
           brew install xcodegen
@@ -55,5 +64,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ScrollCap-unsigned-IPA
-          path: output/
+          path: source/output/
           if-no-files-found: error

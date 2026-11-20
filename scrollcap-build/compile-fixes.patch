@@ -1,0 +1,142 @@
+diff --git a/App/Shared/CaptureView.swift b/App/Shared/CaptureView.swift
+index fb501ae..b74116b 100644
+--- a/App/Shared/CaptureView.swift
++++ b/App/Shared/CaptureView.swift
+@@ -34,19 +34,7 @@ struct CaptureView: View {
+ 
+                     Spacer()
+ 
+-                    self.contentArea(in: geometry)
+-                        .transition(.asymmetric(
+-                            insertion: .scale(scale: 0.95).combined(with: .opacity),
+-                            removal: .scale(scale: 1.05).combined(with: .opacity)
+-                        ))
+-                        .animation(
+-                            self.userMode == .elder ? nil : SCTheme.Animation.gentle,
+-                            value: self.viewModel.captureState.isCapturing
+-                        )
+-                        .animation(
+-                            self.userMode == .elder ? nil : SCTheme.Animation.gentle,
+-                            value: self.viewModel.capturedScreenshot?.id
+-                        )
++                    self.animatedContent(in: geometry)
+ 
+                     Spacer()
+ 
+@@ -83,7 +71,7 @@ struct CaptureView: View {
+         }
+         .sheet(isPresented: self.$showExportSheet) {
+             if let screenshot = viewModel.capturedScreenshot {
+-                ExportSheet(screenshot: screenshot, viewModel: self.viewModel)
++                ExportSheet(screenshot: screenshot)
+             }
+         }
+         .task {
+@@ -115,6 +103,19 @@ struct CaptureView: View {
+ 
+     // MARK: - Content Area
+ 
++    private func animatedContent(in geometry: GeometryProxy) -> some View {
++        let transition = AnyTransition.asymmetric(
++            insertion: .scale(scale: 0.95).combined(with: .opacity),
++            removal: .scale(scale: 1.05).combined(with: .opacity)
++        )
++        let animation = self.userMode == .elder ? nil : SCTheme.Animation.gentle
++
++        return self.contentArea(in: geometry)
++            .transition(transition)
++            .animation(animation, value: self.viewModel.captureState.isCapturing)
++            .animation(animation, value: self.viewModel.capturedScreenshot?.id)
++    }
++
+     @ViewBuilder
+     private func contentArea(in geometry: GeometryProxy) -> some View {
+         if let screenshot = viewModel.capturedScreenshot {
+diff --git a/App/Shared/ExportSheet.swift b/App/Shared/ExportSheet.swift
+index 8f6273e..22b0376 100644
+--- a/App/Shared/ExportSheet.swift
++++ b/App/Shared/ExportSheet.swift
+@@ -130,7 +130,10 @@ struct ExportSheet: View {
+         }
+         #elseif os(iOS)
+         do {
+-            let data = try await service.exportToData(image: self.screenshot.image, options: options)
++            guard let data = try await service.exportToData(image: self.screenshot.image, options: options) else {
++                ErrorPresenter.shared.present(.export(.encodingFailed))
++                return
++            }
+             let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(
+                 "ScrollCap_\(Int(Date().timeIntervalSince1970)).\(self.selectedFormat.fileExtension)"
+             )
+diff --git a/App/Shared/Networking/APIClient.swift b/App/Shared/Networking/APIClient.swift
+index a51f847..b2eeb9c 100644
+--- a/App/Shared/Networking/APIClient.swift
++++ b/App/Shared/Networking/APIClient.swift
+@@ -4,26 +4,26 @@ import OSLog
+ // MARK: - Protocol (for DI / Testing)
+ 
+ protocol NetworkClient: Sendable {
+-    func request<T: Decodable>(
++    func request<T: Decodable & Sendable>(
+         _ type: T.Type,
+         url: URL,
+         method: HTTPMethod,
+-        body: (any Encodable)?,
++        body: (any Encodable & Sendable)?,
+         headers: [String: String]?,
+         config: APIClient.RequestConfig
+     ) async throws -> T
+ 
+-    func post<T: Decodable>(
++    func post<T: Decodable & Sendable>(
+         _ type: T.Type,
+         url: URL,
+-        body: any Encodable,
++        body: any Encodable & Sendable,
+         headers: [String: String]?,
+         config: APIClient.RequestConfig
+     ) async throws -> T
+ }
+ 
+ actor APIClient: NetworkClient {
+-    static let shared: any NetworkClient = APIClient()
++    static let shared = APIClient()
+ 
+     private let logger = Logger(subsystem: "com.ethanshen.scrollcap", category: "api")
+     private let decoder = JSONDecoder()
+@@ -38,7 +38,7 @@ actor APIClient: NetworkClient {
+         return URLSession(configuration: config)
+     }()
+ 
+-    struct RequestConfig {
++    struct RequestConfig: Sendable {
+         var maxRetries: Int = 3
+         var retryDelay: TimeInterval = 1.0
+         var retryBackoffMultiplier: Double = 2.0
+@@ -50,11 +50,11 @@ actor APIClient: NetworkClient {
+ 
+     // MARK: - Core Request
+ 
+-    func request<T: Decodable>(
++    func request<T: Decodable & Sendable>(
+         _ type: T.Type,
+         url: URL,
+         method: HTTPMethod = .get,
+-        body: (any Encodable)? = nil,
++        body: (any Encodable & Sendable)? = nil,
+         headers: [String: String]? = nil,
+         config: RequestConfig = .default
+     ) async throws -> T {
+@@ -74,10 +74,10 @@ actor APIClient: NetworkClient {
+         return try await self.executeWithRetry(urlRequest, type: type, config: config)
+     }
+ 
+-    func post<T: Decodable>(
++    func post<T: Decodable & Sendable>(
+         _ type: T.Type,
+         url: URL,
+-        body: any Encodable,
++        body: any Encodable & Sendable,
+         headers: [String: String]? = nil,
+         config: RequestConfig = .default
+     ) async throws -> T {
